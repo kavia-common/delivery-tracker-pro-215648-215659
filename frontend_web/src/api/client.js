@@ -11,6 +11,8 @@ const API_BASE = process.env.REACT_APP_API_BASE || '';
  * Simple in-memory token cache to avoid frequent localStorage reads.
  */
 let inMemoryToken = null;
+let refreshInFlight = null;
+let logoutHandler = null;
 
 // PUBLIC_INTERFACE
 export function setAccessToken(token) {
@@ -32,6 +34,28 @@ export function getAccessToken() {
   return stored;
 }
 
+// PUBLIC_INTERFACE
+export function setRefreshToken(token) {
+  /** Store refresh token (if backend issues one) */
+  if (token) {
+    localStorage.setItem('refresh_token', token);
+  } else {
+    localStorage.removeItem('refresh_token');
+  }
+}
+
+// PUBLIC_INTERFACE
+export function getRefreshToken() {
+  /** Retrieve refresh token */
+  return localStorage.getItem('refresh_token');
+}
+
+// PUBLIC_INTERFACE
+export function onUnauthorized(fn) {
+  /** Register a global logout/unauthorized handler invoked when refresh fails */
+  logoutHandler = fn;
+}
+
 const client = axios.create({
   baseURL: API_BASE,
   headers: {
@@ -49,11 +73,52 @@ client.interceptors.request.use((config) => {
   return config;
 });
 
-// Simple response error logging
+async function refreshAccessToken() {
+  const refresh_token = getRefreshToken();
+  if (!refresh_token) throw new Error('No refresh token');
+  const res = await axios.post(
+    `${API_BASE}/auth/refresh`,
+    { refresh_token },
+    { headers: { 'Content-Type': 'application/json' } }
+  );
+  const data = res.data || res;
+  if (!data?.access_token) {
+    throw new Error('Invalid refresh response');
+  }
+  setAccessToken(data.access_token);
+  return data.access_token;
+}
+
+// Response interceptor: try token refresh on 401 once
 client.interceptors.response.use(
   (resp) => resp,
-  (error) => {
-    // Optional: Handle 401s globally here if needed
+  async (error) => {
+    const original = error.config || {};
+    const status = error?.response?.status;
+
+    if (status === 401 && !original._retry) {
+      original._retry = true;
+
+      try {
+        if (!refreshInFlight) {
+          refreshInFlight = refreshAccessToken().finally(() => {
+            refreshInFlight = null;
+          });
+        }
+        const newToken = await refreshInFlight;
+        // retry original request with new token
+        original.headers = original.headers || {};
+        original.headers.Authorization = `Bearer ${newToken}`;
+        return client(original);
+      } catch (e) {
+        // refresh failed -> logout if handler set
+        if (logoutHandler) {
+          try {
+            logoutHandler();
+          } catch (_) {}
+        }
+      }
+    }
     return Promise.reject(error);
   }
 );

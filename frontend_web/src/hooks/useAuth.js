@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import client, { apiGet, apiPost, setAccessToken, getAccessToken } from '../api/client';
+import client, { apiGet, apiPost, setAccessToken, getAccessToken, setRefreshToken, onUnauthorized } from '../api/client';
 
 /**
  * Auth context to store current user and token handling.
@@ -17,8 +17,14 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [initializing, setInitializing] = useState(true);
 
-  // load user from token on mount
+  // load user from token on mount and register unauthorized handler
   useEffect(() => {
+    onUnauthorized(() => {
+      setAccessToken(null);
+      setRefreshToken(null);
+      setUser(null);
+    });
+
     const token = getAccessToken();
     if (!token) {
       setInitializing(false);
@@ -32,6 +38,7 @@ export function AuthProvider({ children }) {
       .catch(() => {
         // invalid token
         setAccessToken(null);
+        setRefreshToken(null);
         setUser(null);
       })
       .finally(() => setInitializing(false));
@@ -41,6 +48,10 @@ export function AuthProvider({ children }) {
     /**
      * PUBLIC_INTERFACE
      * Perform password login with backend form-encoded endpoint.
+     * Accepts:
+     *  - email (string)
+     *  - password (string)
+     * Returns current user profile, and stores access/refresh tokens if provided.
      */
     const params = new URLSearchParams();
     params.append('username', email);
@@ -49,16 +60,20 @@ export function AuthProvider({ children }) {
     const res = await client.post('/auth/login', params, {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
-    const { access_token, user: me } = res.data || res;
-    setAccessToken(access_token);
-    setUser(me);
+    const payload = res.data || res;
+    const access_token = payload?.access_token;
+    const me = payload?.user;
+    const refresh_token = payload?.refresh_token;
+    setAccessToken(access_token || null);
+    if (refresh_token) setRefreshToken(refresh_token);
+    setUser(me || null);
     return me;
   };
 
   const register = async (email, password, full_name) => {
     /**
      * PUBLIC_INTERFACE
-     * Register a user; then auto-login.
+     * Register a user; then auto-login using provided credentials.
      */
     await apiPost('/auth/register', { email, password, full_name });
     return login(email, password);
@@ -67,9 +82,10 @@ export function AuthProvider({ children }) {
   const logout = () => {
     /**
      * PUBLIC_INTERFACE
-     * Clears auth state and token.
+     * Clears auth state and tokens.
      */
     setAccessToken(null);
+    setRefreshToken(null);
     setUser(null);
   };
 

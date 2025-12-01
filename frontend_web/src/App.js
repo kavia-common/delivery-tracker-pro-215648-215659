@@ -47,9 +47,30 @@ function App() {
               {theme === 'light' ? '🌙 Dark' : '☀️ Light'}
             </button>
             <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/history" element={<History />} />
-              <Route path="/deliveries/:id" element={<DeliveryDetails />} />
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <Dashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/history"
+                element={
+                  <ProtectedRoute>
+                    <History />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/deliveries/:id"
+                element={
+                  <ProtectedRoute>
+                    <DeliveryDetails />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/admin"
                 element={
