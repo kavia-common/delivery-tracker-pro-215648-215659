@@ -1,9 +1,26 @@
-import React, { useState, useEffect } from 'react';
-import logo from './logo.svg';
+import React, { useEffect, useState } from 'react';
 import './App.css';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+} from 'react-router-dom';
+import { AuthProvider, ProtectedRoute } from './hooks/useAuth';
+import Navbar from './components/Navbar';
+
+import Dashboard from './pages/Dashboard';
+import History from './pages/History';
+import DeliveryDetails from './pages/DeliveryDetails';
+import Admin from './pages/Admin';
+import Login from './pages/Login';
+import Register from './pages/Register';
 
 // PUBLIC_INTERFACE
 function App() {
+  /**
+   * PUBLIC_INTERFACE
+   * Root application component: sets theme, mounts router and auth provider.
+   */
   const [theme, setTheme] = useState('light');
 
   // Effect to apply theme to document element
@@ -13,35 +30,41 @@ function App() {
 
   // PUBLIC_INTERFACE
   const toggleTheme = () => {
-    setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
+    setTheme((t) => (t === 'light' ? 'dark' : 'light'));
   };
 
   return (
     <div className="App">
-      <header className="App-header">
-        <button 
-          className="theme-toggle" 
-          onClick={toggleTheme}
-          aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-        >
-          {theme === 'light' ? '🌙 Dark' : '☀️ Light'}
-        </button>
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <p>
-          Current theme: <strong>{theme}</strong>
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+      <Router>
+        <AuthProvider>
+          <Navbar />
+          <main style={{ padding: 16 }}>
+            <button
+              className="theme-toggle"
+              onClick={toggleTheme}
+              aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+            >
+              {theme === 'light' ? '🌙 Dark' : '☀️ Light'}
+            </button>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/history" element={<History />} />
+              <Route path="/deliveries/:id" element={<DeliveryDetails />} />
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute roles={['admin']}>
+                    <Admin />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="*" element={<div style={{ padding: 24 }}>Not Found</div>} />
+            </Routes>
+          </main>
+        </AuthProvider>
+      </Router>
     </div>
   );
 }
