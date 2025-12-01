@@ -1,0 +1,4 @@
+{
+    "command": "npm run test",
+    "working_directory": "/home/kavia/workspace/code-generation/delivery-tracker-pro-215648-215659/frontend_web"
+}
