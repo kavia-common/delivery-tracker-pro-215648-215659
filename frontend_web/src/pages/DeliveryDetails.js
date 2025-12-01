@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { apiGet, apiPost } from '../api/client';
 import { StatusBadge, MapPlaceholder } from '../components/UiBits';
 import { useAuth } from '../hooks/useAuth';
+import { subscribeDelivery } from '../services/socket';
 
 export default function DeliveryDetails() {
   const { id } = useParams();
@@ -36,6 +37,35 @@ export default function DeliveryDetails() {
     if (deliveryId > 0) loadDetail();
   }, [deliveryId]);
 
+  // Realtime updates for this delivery
+  useEffect(() => {
+    if (!deliveryId) return;
+    const unsub = subscribeDelivery(deliveryId, (msg) => {
+      // Expected message types: { type: 'status_update'|'location_update'|'delivery_update', data: {...} }
+      if (!msg || typeof msg !== 'object') return;
+      setDetail((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev };
+        if (msg.type === 'delivery_update' && msg.data?.delivery) {
+          next.delivery = { ...next.delivery, ...msg.data.delivery };
+        }
+        if (msg.type === 'status_update' && msg.data?.event) {
+          next.delivery = { ...next.delivery, status: msg.data.event.status };
+          const events = Array.isArray(next.recent_status_events) ? next.recent_status_events.slice(0) : [];
+          events.unshift(msg.data.event);
+          next.recent_status_events = events.slice(0, 20);
+        }
+        if (msg.type === 'location_update' && msg.data?.location) {
+          next.latest_location = msg.data.location;
+        }
+        return next;
+      });
+    });
+    return () => {
+      try { unsub && unsub(); } catch (_) {}
+    };
+  }, [deliveryId]);
+
   async function submitStatus(e) {
     e.preventDefault();
     setStatusSubmitting(true);
@@ -46,7 +76,8 @@ export default function DeliveryDetails() {
         note: statusForm.note || null,
       });
       setStatusForm({ status: 'in_transit', note: '' });
-      await loadDetail();
+      // Do not force reload; realtime will update. Keep fallback:
+      // await loadDetail();
     } catch (e) {
       setErr(e?.response?.data?.detail || 'Failed to append status');
     } finally {
@@ -72,7 +103,7 @@ export default function DeliveryDetails() {
         source: 'web',
       });
       setLocForm({ latitude: '', longitude: '', accuracy_m: '' });
-      await loadDetail();
+      // Realtime will reflect the change
     } catch (e) {
       setErr(e?.response?.data?.detail || 'Failed to ingest location');
     } finally {

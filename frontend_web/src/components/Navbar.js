@@ -2,9 +2,11 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { getApiBase, getAccessToken } from '../api/client';
+import { useToasts } from '../hooks/useToasts';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
+  const { count } = useToasts();
 
   const exportHref = (() => {
     if (!user) return '#';
@@ -36,6 +38,30 @@ export default function Navbar() {
         )}
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        {user && (
+          <div style={{ position: 'relative', marginRight: 8 }}>
+            <span className="App-link" aria-label="Notifications">🔔</span>
+            {count > 0 && (
+              <span
+                aria-label={`${count} new notifications`}
+                style={{
+                  position: 'absolute',
+                  top: -6,
+                  right: -10,
+                  background: '#ef4444',
+                  color: '#fff',
+                  borderRadius: 999,
+                  fontSize: 10,
+                  padding: '2px 6px',
+                  minWidth: 16,
+                  textAlign: 'center'
+                }}
+              >
+                {count}
+              </span>
+            )}
+          </div>
+        )}
         {!user && (
           <>
             <Link to="/login" className="App-link">Login</Link>

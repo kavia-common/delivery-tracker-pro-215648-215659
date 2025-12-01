@@ -3,6 +3,7 @@ import { useAuth } from '../hooks/useAuth';
 import { apiGet, apiPost } from '../api/client';
 import { Link } from 'react-router-dom';
 import { StatusBadge } from '../components/UiBits';
+import { subscribeNotifications } from '../services/socket';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -51,6 +52,45 @@ export default function Dashboard() {
   useEffect(() => {
     loadDeliveries();
     loadNotifications();
+  }, []);
+
+  // Live notifications reflect at the top list as they come
+  useEffect(() => {
+    const unsub = subscribeNotifications((msg) => {
+      if (!msg || typeof msg !== 'object') return;
+      // Basic append to the notifications list
+      setNotifications((list) => {
+        const copy = Array.isArray(list) ? list.slice(0) : [];
+        // backend might send structure like NotificationEventOut compatible
+        const item = msg.notification || msg.data || msg;
+        if (item && item.id != null) {
+          // dedupe by id at head
+          if (!copy.some((i) => i.id === item.id)) {
+            copy.unshift(item);
+          }
+        }
+        return copy.slice(0, 10);
+      });
+
+      // If delivery update comes with embedded delivery, reflect in grid
+      if (msg.delivery || msg.data?.delivery) {
+        const upd = msg.delivery || msg.data.delivery;
+        setDeliveries((arr) =>
+          arr.map((d) => (d.id === upd.id ? { ...d, ...upd } : d))
+        );
+      }
+      // If status change is present
+      if (msg.type === 'status_update' && msg.data?.event && msg.data?.delivery_id) {
+        setDeliveries((arr) =>
+          arr.map((d) =>
+            d.id === msg.data.delivery_id ? { ...d, status: msg.data.event.status } : d
+          )
+        );
+      }
+    });
+    return () => {
+      try { unsub && unsub(); } catch (_) {}
+    };
   }, []);
 
   async function handleCreateDelivery(e) {
@@ -158,11 +198,11 @@ export default function Dashboard() {
         ) : (
           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {notifications.map(n => (
-              <li key={n.id} style={{ border: '1px solid var(--border-color)', borderRadius: 8, padding: 8, marginBottom: 8 }}>
+              <li key={n.id ?? `${n.type}-${n.created_at ?? Math.random()}`} style={{ border: '1px solid var(--border-color)', borderRadius: 8, padding: 8, marginBottom: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <strong>{n.title || n.type}</strong>
                   <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                    {new Date(n.created_at).toLocaleString()}
+                    {n.created_at ? new Date(n.created_at).toLocaleString() : ''}
                   </span>
                 </div>
                 <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>{n.message}</div>
